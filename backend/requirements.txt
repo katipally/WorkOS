@@ -1,0 +1,35 @@
+# Web
+fastapi==0.115.8
+starlette==0.41.3
+uvicorn[standard]>=0.34.0
+python-multipart>=0.0.20
+pydantic-settings>=2.7.1
+httpx>=0.28.1
+sse-starlette>=2.1.0
+
+# Database
+asyncpg>=0.30.0
+pgvector>=0.3.6
+
+# AI / LLM
+langchain-core>=0.3.0
+langchain-openai>=0.3.0
+langchain-ollama>=0.3.0
+langchain-text-splitters>=0.3.0
+langchain-community>=0.3.0
+langgraph>=0.2.4
+openai>=1.60.0
+flashrank>=0.2.0
+
+# Document processing
+docling>=2.0.0
+
+# Audio transcription
+faster-whisper>=1.0.0
+
+# Resilience / retry
+tenacity>=9.0.0
+
+# Dev/Test
+pytest>=8.3.0
+pytest-asyncio>=0.25.0
