@@ -17,6 +17,8 @@ class AISettingsOut(BaseModel):
     meeting_summary_model: str = "gpt-4o-mini"
     meeting_actions_provider: str = "openai"
     meeting_actions_model: str = "gpt-4o-mini"
+    vision_provider: str = "openai"
+    vision_model: str = "gpt-4o"
     openai_api_key: str = ""
     ollama_base_url: str = "http://host.docker.internal:11434"
 
@@ -30,6 +32,8 @@ class AISettingsUpdate(BaseModel):
     meeting_summary_model: Optional[str] = None
     meeting_actions_provider: Optional[str] = None
     meeting_actions_model: Optional[str] = None
+    vision_provider: Optional[str] = None
+    vision_model: Optional[str] = None
     openai_api_key: Optional[str] = None
     ollama_base_url: Optional[str] = None
 

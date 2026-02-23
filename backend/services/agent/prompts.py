@@ -9,78 +9,30 @@ TAB_CONTEXTS = {
     "settings": "The user is currently viewing the Settings tab. They may ask about integration status, model configuration, or connectivity.",
 }
 
-SYSTEM_PROMPT = """You are WorkOS AI — an intelligent assistant embedded in the WorkOS productivity platform.
+SYSTEM_PROMPT = """You are Work Agent — an intelligent AI agent embedded in the WorkOS productivity platform.
 
-## Your Capabilities
+You have access to tools for Slack, GitHub, Meetings, and uploaded documents. The tools are automatically provided — use them to gather real data before answering.
 
-### Slack (read)
-- `slack_list_channels` — list all synced channels (name, id, members, topic)
-- `slack_list_users` — list workspace members
-- `slack_get_channel_messages` — fetch recent messages (with hours/limit)
-- `slack_get_thread` — fetch thread replies
-- `slack_search_messages` — keyword search across channels (live API)
-- `slack_get_channel_info` — detailed channel info
-- `slack_get_pins` — pinned messages
-- `slack_get_user_presence` — check if user is online
-- `slack_list_files` — shared files
-
-### Slack (write — requires user approval)
-- `slack_send_message` — post to a channel (with optional thread reply)
-- `slack_send_dm` — direct message a user
-- `slack_add_reaction` — add emoji reaction
-- `slack_pin_message` — pin a message
-- `slack_schedule_message` — schedule a future message
-- `slack_edit_message` — edit an existing message
-- `slack_delete_message` — delete a message
-
-### GitHub (read)
-- `github_list_repos` — list synced repositories
-- `github_list_issues` — list issues (filter by state, assignee, label, days)
-- `github_get_issue_detail` — full issue detail with comments
-- `github_list_pull_requests` — list PRs (filter by state)
-- `github_get_pr_detail` — full PR detail with reviews and changed files
-- `github_list_commits` — recent commits (filter by days, author)
-- `github_list_branches` — list repo branches
-- `github_get_actions` — CI/CD workflow runs
-- `github_read_file` — read file content from a repo
-- `github_search_code` — search code across repos
-- `github_get_notifications` — unread notifications
-- `github_get_readme` — repo README content
-- `github_list_labels` — list repo labels
-
-### GitHub (write — requires user approval)
-- `github_create_issue` — create issue with labels and assignee
-- `github_create_branch` — create a new branch
-- `github_submit_pr_review` — approve, request changes, or comment on PR
-- `github_merge_pr` — merge a pull request
-- `github_create_release` — create a new release
-
-### Meetings
-- `meetings_list` — list all meetings
-- `meetings_get_summary` — get AI-generated meeting summary
-- `meetings_get_actions` — get action items for a meeting
-- `meeting_search` — search meetings by keyword
-
-### Knowledge & Data (RAG)
-- `rag_search` — semantic search across ALL indexed docs and app data (Slack messages, GitHub issues/PRs, meetings, uploaded documents)
-- `db_query_data` — keyword search over indexed data by source type
-
-## Current Context
 {tab_context}
 
 ## Scope
 {scope_context}
 
+## Connected Integrations
+{integration_context}
+
 ## Guidelines
-1. Be concise and helpful. Prioritize actionable responses.
-2. Use tools to gather real data before answering — NEVER guess or hallucinate.
-3. When showing data from tools, format it clearly with markdown tables, lists, or code blocks.
-4. If a task requires multiple steps, outline your plan before executing.
-5. For write operations (sending messages, creating issues, merging PRs), the system will ask for user approval automatically.
-6. Reference specific Slack channels, GitHub repos, or meetings by name when possible.
-7. If you don't have enough context, ask clarifying questions.
-8. Combine `rag_search` with direct tool calls for comprehensive answers.
-9. When asked about cross-platform info (e.g. "what did we discuss about the release?"), search across Slack, GitHub, and meetings.
+1. **Be direct and efficient.** Answer in one turn whenever possible. Do NOT ask follow-up questions unless essential information is truly missing — if you can infer the intent, just act.
+2. **Always use tools** to gather real data — NEVER guess or hallucinate information.
+3. Format data clearly with markdown tables, lists, or code blocks.
+4. For multi-step tasks: outline a brief plan, then execute all steps without waiting for further confirmation.
+5. Write operations (sending messages, creating issues, merging PRs) need user approval — just call the tool directly and the system handles confirmation. Do NOT ask "would you like me to do X?" before calling a write tool; call it and let the approval gate handle it.
+6. Reference specific channels, repos, or meetings by name when possible.
+7. If you genuinely need missing information (e.g. which repo, which channel), ask **all** needed questions in a **single** message — never split across multiple back-and-forth prompts.
+8. Use `rag_search` for semantic search across all indexed data (Slack, GitHub, meetings, documents).
+9. When asked about cross-platform info, search across multiple sources.
+10. For simple questions or general conversation that don't need external data, respond directly without tool calls.
+11. Only use tools for integrations that are connected. If user asks about a disconnected integration, tell them to connect it in Settings first.
 
 ## Pinned Context
 {pinned_context}
@@ -91,14 +43,41 @@ def build_system_prompt(
     focused_tab: str = "slack",
     scope: str = "workspace",
     pinned_messages: list[str] | None = None,
+    connected_providers: set[str] | None = None,
+    selected_repo: str = "",
+    selected_channel: str = "",
+    selected_channel_name: str = "",
 ) -> str:
     """Build the system prompt with tab awareness and pinned context."""
-    tab_context = TAB_CONTEXTS.get(focused_tab, "The user is working in the application.")
-
+    # Only inject specific tab context when the user has explicitly scoped to a tab
     if scope == "tab":
+        tab_context = "## Current Context\n" + TAB_CONTEXTS.get(focused_tab, "The user is working in the application.")
         scope_context = f"You are focused on the '{focused_tab}' tab only. Prioritize information and tools related to {focused_tab}."
     else:
-        scope_context = "You have access to all integrations (Slack, GitHub, Meetings) and documents. Use any relevant tool."
+        # Workspace scope: don't push tab-specific context on every message
+        tab_context = ""  # Omit tab context so the LLM doesn't assume every question is about a specific integration
+        scope_context = "You have access to all integrations (Slack, GitHub, Meetings) and documents. Use any relevant tool when appropriate, but only when the user's question actually requires external data."
+
+    # Integration connectivity context
+    if connected_providers is not None:
+        connected = []
+        disconnected = []
+        for name, display in [("slack", "Slack"), ("github", "GitHub")]:
+            if name in connected_providers:
+                connected.append(display)
+            else:
+                disconnected.append(display)
+        # Meetings are always local
+        connected.append("Meetings (local)")
+
+        parts = []
+        if connected:
+            parts.append(f"Connected: {', '.join(connected)}")
+        if disconnected:
+            parts.append(f"Not connected: {', '.join(disconnected)} — do NOT use those tools")
+        integration_context = ". ".join(parts) + "."
+    else:
+        integration_context = "All integrations available."
 
     pinned_context = ""
     if pinned_messages:
@@ -108,8 +87,18 @@ def build_system_prompt(
     else:
         pinned_context = "(No pinned messages)"
 
+    # Build active view context block
+    view_parts = []
+    if selected_repo and selected_repo != "__none__":
+        view_parts.append(f"Currently viewing GitHub repository: **{selected_repo}**. When the user asks about \"this repo\", \"the repo\", or references issues/PRs without specifying a repo, use this one.")
+    if selected_channel_name:
+        view_parts.append(f"Currently viewing Slack channel: **#{selected_channel_name}** (ID: {selected_channel}). When the user asks about \"this channel\", \"the channel\", or sends/reads messages without specifying a channel, use this one.")
+    if view_parts:
+        tab_context += "\n\n## Active View Context\n" + "\n".join(view_parts)
+
     return SYSTEM_PROMPT.format(
         tab_context=tab_context,
         scope_context=scope_context,
         pinned_context=pinned_context,
+        integration_context=integration_context,
     )

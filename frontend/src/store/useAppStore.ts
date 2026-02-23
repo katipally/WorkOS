@@ -22,6 +22,10 @@ interface AppStore {
   toggleAIPanel: () => void;
   currentChatSessionId: string | null;
   setCurrentChatSessionId: (id: string | null) => void;
+  aiScope: "workspace" | "tab";
+  setAIScope: (scope: "workspace" | "tab") => void;
+  aiPanelWidth: number;
+  setAIPanelWidth: (width: number) => void;
   // Meetings state
   selectedMeetingId: string | null;
   setSelectedMeetingId: (id: string | null) => void;
@@ -44,6 +48,10 @@ export const useAppStore = create<AppStore>()(
       toggleAIPanel: () => set((s) => ({ aiPanelOpen: !s.aiPanelOpen })),
       currentChatSessionId: null,
       setCurrentChatSessionId: (id) => set({ currentChatSessionId: id }),
+      aiScope: "workspace",
+      setAIScope: (scope) => set({ aiScope: scope }),
+      aiPanelWidth: 440,
+      setAIPanelWidth: (width) => set({ aiPanelWidth: width }),
       // Meetings
       selectedMeetingId: null,
       setSelectedMeetingId: (id) => set({ selectedMeetingId: id }),
@@ -57,6 +65,8 @@ export const useAppStore = create<AppStore>()(
         sidebarCollapsed: state.sidebarCollapsed,
         aiPanelOpen: state.aiPanelOpen,
         currentChatSessionId: state.currentChatSessionId,
+        aiScope: state.aiScope,
+        aiPanelWidth: state.aiPanelWidth,
         selectedMeetingId: state.selectedMeetingId,
       }),
     }

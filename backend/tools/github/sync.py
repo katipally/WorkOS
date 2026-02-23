@@ -114,4 +114,32 @@ async def github_sync_repos(inp) -> list[GitHubRepo]:
         )
 
     logger.info("[github_sync_repos] upserted %d repos", len(repos))
+
+    # Index repo metadata into RAG data_index (background, non-blocking)
+    try:
+        from services.rag_service import index_data
+
+        for repo in repos:
+            content = f"GitHub repo {repo.full_name}"
+            if repo.description:
+                content += f" — {repo.description}"
+            if repo.language:
+                content += f" (language: {repo.language})"
+            content += f" | stars: {repo.stars}, forks: {repo.forks}, open issues: {repo.open_issues}"
+            await index_data(
+                source_type="github_repo",
+                entity_id=str(repo.id),
+                title=repo.full_name,
+                content=content,
+                metadata={
+                    "full_name": repo.full_name,
+                    "language": repo.language or "",
+                    "html_url": repo.html_url,
+                    "is_private": repo.is_private,
+                },
+            )
+        logger.info("[github_sync_repos] indexed %d repos for RAG", len(repos))
+    except Exception as e:
+        logger.warning("[github_sync_repos] RAG indexing failed (non-fatal): %s", e)
+
     return repos

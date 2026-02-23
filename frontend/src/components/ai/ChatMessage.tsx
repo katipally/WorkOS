@@ -1,11 +1,9 @@
-import { memo, useState, useCallback, Component, type ReactNode } from "react";
-import { Pin, Copy, Check, Bot, GitBranch, RefreshCw, User, Pencil, X as XIcon, Send, ThumbsUp, ThumbsDown } from "lucide-react";
+import { memo, useState, useCallback, useMemo, Component, type ReactNode } from "react";
+import { Pin, Copy, Check, GitBranch, RefreshCw, Pencil, X as XIcon, Send, ThumbsUp, ThumbsDown, Brain, ChevronDown, FileText, Image as ImageIcon, Music, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types";
 import {
-  Message,
-  MessageAvatar,
   MessageContent,
   MessageActions,
   MessageAction,
@@ -27,6 +25,7 @@ interface ChatMessageItemProps {
   onStartEdit?: () => void;
   onCancelEdit?: () => void;
   toolResults?: Map<string, { output?: Record<string, unknown>; error?: string }>;
+  thoughts?: string[];
 }
 
 /* Tiny error boundary so one bad message doesn't crash the whole chat */
@@ -70,12 +69,38 @@ const ChatMessageInner = memo(function ChatMessageInner({
   onStartEdit,
   onCancelEdit,
   toolResults,
+  thoughts,
 }: ChatMessageItemProps) {
   const [copied, setCopied] = useState(false);
   const [editText, setEditText] = useState(message.content);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+  const [showReasoning, setShowReasoning] = useState(false);
   const isUser = message.role === "user";
   const isTool = message.role === "tool";
+
+  // Parse file attachments from user messages: "[filename.ext]" patterns
+  const { text: displayText, attachments } = useMemo(() => {
+    if (!isUser) return { text: message.content, attachments: [] as string[] };
+    const filePattern = /\[([^\]]+\.\w+)\]/g;
+    const files: string[] = [];
+    let match;
+    while ((match = filePattern.exec(message.content)) !== null) {
+      files.push(match[1]);
+    }
+    const cleaned = message.content.replace(filePattern, "").trim();
+    return { text: cleaned, attachments: files };
+  }, [message.content, isUser]);
+
+  const getFileAttachmentIcon = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+    if (["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(ext))
+      return <ImageIcon className="w-3 h-3 text-emerald-500" />;
+    if (["mp3", "wav", "m4a", "ogg", "flac", "aac"].includes(ext))
+      return <Music className="w-3 h-3 text-amber-500" />;
+    if (["mp4", "webm", "mkv", "avi", "mov"].includes(ext))
+      return <Film className="w-3 h-3 text-blue-500" />;
+    return <FileText className="w-3 h-3 text-muted-foreground" />;
+  };
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content);
@@ -97,13 +122,7 @@ const ChatMessageInner = memo(function ChatMessageInner({
     // Editing mode
     if (isEditing && onEdit) {
       return (
-        <Message className="flex-row-reverse gap-3 items-start">
-          <MessageAvatar
-            fallback="U"
-            className="bg-primary text-primary-foreground border-0 shrink-0"
-          >
-            <User className="w-4 h-4" />
-          </MessageAvatar>
+        <div className="flex justify-end">
           <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-muted border border-border px-3 py-2 space-y-2">
             <textarea
               className="w-full text-sm bg-transparent resize-none focus:outline-none min-h-[60px] text-foreground"
@@ -139,20 +158,30 @@ const ChatMessageInner = memo(function ChatMessageInner({
               </Button>
             </div>
           </div>
-        </Message>
+        </div>
       );
     }
 
     return (
-      <Message className="flex-row-reverse gap-3 items-start group">
-        <MessageAvatar
-          fallback="U"
-          className="bg-primary text-primary-foreground border-0 shrink-0"
-        >
-          <User className="w-4 h-4" />
-        </MessageAvatar>
-        <div className="relative max-w-[85%] rounded-2xl rounded-tr-md bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
-          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+      <div className="flex justify-end group">
+        <div className="relative max-w-[85%] space-y-1.5">
+          {/* File attachments strip */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 justify-end">
+              {attachments.map((name, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/80 border border-border/40 text-xs text-foreground/80"
+                >
+                  {getFileAttachmentIcon(name)}
+                  <span className="truncate max-w-[140px]">{name}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="rounded-2xl rounded-tr-md bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
+            {displayText && <p className="whitespace-pre-wrap leading-relaxed">{displayText}</p>}
+          </div>
           {/* Edit button on hover */}
           {onStartEdit && message.id !== "optimistic-user" && (
             <Button
@@ -165,7 +194,7 @@ const ChatMessageInner = memo(function ChatMessageInner({
             </Button>
           )}
         </div>
-      </Message>
+      </div>
     );
   }
 
@@ -189,15 +218,39 @@ const ChatMessageInner = memo(function ChatMessageInner({
   });
 
   return (
-    <Message className="group items-start">
-      <MessageAvatar
-        fallback="AI"
-        className="bg-card border border-border text-foreground shrink-0"
-      >
-        <Bot className="w-4 h-4" />
-      </MessageAvatar>
+    <div className="group">
+      <div className="space-y-1.5">
+        {/* Reasoning toggle — shown for completed assistant messages with thoughts */}
+        {!isStreaming && thoughts && thoughts.length > 0 && (
+          <div>
+            <button
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5 px-1 -ml-1 rounded hover:bg-muted/50"
+              onClick={() => setShowReasoning(!showReasoning)}
+            >
+              <Brain className="w-3.5 h-3.5 text-primary/60" />
+              <span>
+                Reasoned ({thoughts.length} {thoughts.length === 1 ? "step" : "steps"})
+              </span>
+              <ChevronDown
+                className={cn(
+                  "w-3 h-3 transition-transform",
+                  showReasoning && "rotate-180"
+                )}
+              />
+            </button>
+            {showReasoning && (
+              <div className="mt-1.5 ml-1 pl-3 border-l-2 border-primary/20 space-y-1">
+                {thoughts.map((t, i) => (
+                  <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                    <span className="text-primary/40 mr-1.5">›</span>
+                    {t}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-      <div className="flex-1 min-w-0 space-y-1">
         <MessageContent
           className="bg-transparent p-0 text-foreground"
           id={message.id}
@@ -328,6 +381,6 @@ const ChatMessageInner = memo(function ChatMessageInner({
           </MessageActions>
         )}
       </div>
-    </Message>
+    </div>
   );
 });

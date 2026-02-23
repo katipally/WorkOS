@@ -15,24 +15,26 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AI
 from langchain_core.language_models import BaseChatModel
 
 from db.connection import get_pool
+from services.agent.config import (
+    REASONING_MODEL_PREFIXES,
+    CHAT_MODEL_PREFIXES,
+    EMBEDDING_MODEL_PREFIXES,
+    DEFAULT_TEMPERATURE,
+)
 
 log = logging.getLogger(__name__)
-
-# Models that only support temperature=1 (reasoning / chain-of-thought models)
-_REASONING_MODEL_PREFIXES = ("o1", "o3", "o4")
-
-# Prefixes for chat/completion models (used when listing models)
-_CHAT_MODEL_PREFIXES = ("gpt-4", "gpt-3.5", "gpt-5", "o1", "o3", "o4")
-
-# Prefixes for embedding models
-_EMBEDDING_MODEL_PREFIXES = ("text-embedding-",)
 
 
 def _clamp_temperature(model: str, temperature: float) -> float:
     """Return a model-safe temperature. Reasoning models (o1/o3/o4) only support temperature=1."""
-    if any(model.startswith(p) for p in _REASONING_MODEL_PREFIXES):
+    if any(model.startswith(p) for p in REASONING_MODEL_PREFIXES):
         return 1.0
     return temperature
+
+
+def is_reasoning_model(model: str) -> bool:
+    """Return True if the model is a reasoning/chain-of-thought model (o1/o3/o4)."""
+    return any(model.startswith(p) for p in REASONING_MODEL_PREFIXES)
 
 
 async def _get_setting(key: str, default: str = "") -> str:
@@ -46,12 +48,14 @@ async def get_llm(
     purpose: str = "ai",
     *,
     streaming: bool = False,
-    temperature: float = 0.7,
+    temperature: float | None = None,
 ) -> BaseChatModel:
     """
     Return a LangChain chat model based on stored settings.
 
     purpose: 'ai' | 'meeting_summary' | 'meeting_actions'
+    temperature: If None, reads from DB (ai_temperature setting), falling
+                 back to DEFAULT_TEMPERATURE from config.
     """
     if purpose == "ai":
         provider = await _get_setting("ai_provider", "openai")
@@ -66,6 +70,11 @@ async def get_llm(
         provider = "openai"
         model = "gpt-4o"
 
+    # Resolve temperature: explicit arg → DB → config default
+    if temperature is None:
+        raw = await _get_setting("ai_temperature", "")
+        temperature = float(raw) if raw else DEFAULT_TEMPERATURE
+
     if provider == "openai":
         api_key = await _get_setting("openai_api_key", "")
         if not api_key:
@@ -76,11 +85,14 @@ async def get_llm(
         if safe_temp != temperature:
             log.info("Clamped temperature %.1f → %.1f for reasoning model %s", temperature, safe_temp, model)
 
+        # Reasoning models (o1/o3/o4) do not support token-level streaming
+        effective_streaming = streaming and not is_reasoning_model(model)
+
         return ChatOpenAI(
             model=model,
             api_key=api_key,
             temperature=safe_temp,
-            streaming=streaming,
+            streaming=effective_streaming,
         )
     elif provider == "ollama":
         base_url = await _get_setting("ollama_base_url", "http://localhost:11434")
@@ -90,15 +102,22 @@ async def get_llm(
             model=model,
             base_url=base_url,
             temperature=temperature,
+            streaming=streaming,
+            num_ctx=8192,  # Ensure adequate context window for tools + RAG
         )
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
 
+async def get_current_model_name() -> str:
+    """Return the currently selected AI model name (for display purposes)."""
+    return await _get_setting("ai_model", "gpt-4o")
+
+
 async def astream_chat(
     messages: list[BaseMessage],
     purpose: str = "ai",
-    temperature: float = 0.7,
+    temperature: float | None = None,
 ) -> AsyncIterator[str]:
     """Stream text tokens from the LLM."""
     llm = await get_llm(purpose, streaming=True, temperature=temperature)
@@ -110,7 +129,7 @@ async def astream_chat(
 async def ainvoke_chat(
     messages: list[BaseMessage],
     purpose: str = "ai",
-    temperature: float = 0.7,
+    temperature: float | None = None,
 ) -> str:
     """Invoke LLM and return full response text."""
     llm = await get_llm(purpose, streaming=False, temperature=temperature)
@@ -124,7 +143,7 @@ async def list_available_models(provider: str, model_type: str = "chat") -> list
     model_type: 'chat' for LLM/completion models, 'embedding' for embedding models.
     """
     models: list[dict] = []
-    prefixes = _EMBEDDING_MODEL_PREFIXES if model_type == "embedding" else _CHAT_MODEL_PREFIXES
+    prefixes = EMBEDDING_MODEL_PREFIXES if model_type == "embedding" else CHAT_MODEL_PREFIXES
 
     if provider == "openai":
         api_key = await _get_setting("openai_api_key", "")
@@ -151,7 +170,19 @@ async def list_available_models(provider: str, model_type: str = "chat") -> list
                 if resp.status_code == 200:
                     data = resp.json()
                     for m in data.get("models", []):
-                        models.append({"id": m["name"], "name": m["name"]})
+                        name = m["name"]
+                        # For embedding model listing, prefer models with
+                        # "embed" in the name; for chat, exclude them.
+                        is_embed_model = "embed" in name.lower()
+                        if model_type == "embedding" and is_embed_model:
+                            models.append({"id": name, "name": name})
+                        elif model_type != "embedding" and not is_embed_model:
+                            models.append({"id": name, "name": name})
+                    # If no embedding models found, return all (user
+                    # may use any model for embeddings via Ollama)
+                    if model_type == "embedding" and not models:
+                        for m in data.get("models", []):
+                            models.append({"id": m["name"], "name": m["name"]})
         except Exception as e:
             log.warning("Failed to list Ollama models: %s", e)
     return models

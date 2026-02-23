@@ -32,7 +32,7 @@ export function exportChatAsMarkdown(messages: ChatMessage[], title: string): vo
 
   for (const msg of messages) {
     if (msg.role === "tool") continue;
-    const roleLabel = msg.role === "user" ? "**You**" : "**AI Assistant**";
+    const roleLabel = msg.role === "user" ? "**You**" : "**Work Agent**";
     const time = new Date(msg.created_at).toLocaleTimeString();
     lines.push(`### ${roleLabel} — ${time}\n`);
     lines.push(msg.content || "_No content_");

@@ -218,6 +218,34 @@ async def process_meeting_pipeline(meeting_id: str) -> None:
         )
         log.info("Meeting %s processing complete", meeting_id)
 
+        # Index meeting summary + action items into RAG data_index (non-blocking)
+        try:
+            from services.rag_service import index_data
+
+            meeting_row = await pool.fetchrow(
+                "SELECT title, summary, action_items FROM meetings WHERE id = $1", mid
+            )
+            if meeting_row and meeting_row["summary"]:
+                content = f"Meeting: {meeting_row['title']}\n\n{meeting_row['summary']}"
+                actions = json.loads(meeting_row["action_items"]) if meeting_row["action_items"] else []
+                if actions:
+                    content += "\n\nAction Items:\n"
+                    for ai in actions:
+                        content += f"- {ai.get('text', '')}"
+                        if ai.get("assignee"):
+                            content += f" (assigned to {ai['assignee']})"
+                        content += "\n"
+                await index_data(
+                    source_type="meeting",
+                    entity_id=meeting_id,
+                    title=meeting_row["title"],
+                    content=content,
+                    metadata={"meeting_id": meeting_id},
+                )
+                log.info("Indexed meeting %s into RAG data_index", meeting_id)
+        except Exception as e:
+            log.warning("RAG indexing failed for meeting %s (non-fatal): %s", meeting_id, e)
+
     except Exception as e:
         log.exception("Meeting processing pipeline failed for %s", meeting_id)
         await pool.execute(

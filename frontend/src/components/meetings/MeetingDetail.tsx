@@ -2,9 +2,11 @@ import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDropzone } from "react-dropzone";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   ArrowLeft, Upload, Loader2, FileText, Mic, Film, Play, Trash2,
-  CheckCircle2, Circle, Clock, Brain,
+  CheckCircle2, Circle, Clock, Brain, User, Calendar, AlertCircle,
+  ChevronDown, ChevronUp, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { meetingsApi, settingsApi } from "@/api/client";
 import type { Meeting, ActionItem } from "@/types";
@@ -234,6 +237,9 @@ export function MeetingDetail({ meeting: initialMeeting, onBack, onDelete }: Mee
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-4 w-5/6" />
                 <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-20 w-full mt-4" />
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-4 w-full" />
               </div>
             )}
             {!isProcessing && !meeting.summary && (
@@ -246,8 +252,37 @@ export function MeetingDetail({ meeting: initialMeeting, onBack, onDelete }: Mee
               </div>
             )}
             {meeting.summary && (
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown>{meeting.summary}</ReactMarkdown>
+              <div className="space-y-4">
+                {/* Summary metadata bar */}
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground border-b border-border pb-3">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {new Date(meeting.meeting_date).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                  </span>
+                  {meeting.files?.length > 0 && (
+                    <span className="flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      {meeting.files.length} source file{meeting.files.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {meeting.action_items?.length > 0 && (
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {meeting.action_items.length} action item{meeting.action_items.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                <div className="prose prose-sm dark:prose-invert max-w-none
+                  prose-headings:text-foreground prose-headings:font-semibold
+                  prose-h1:text-lg prose-h1:border-b prose-h1:border-border prose-h1:pb-2 prose-h1:mb-3
+                  prose-h2:text-base prose-h2:mt-5 prose-h2:mb-2
+                  prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-1.5
+                  prose-p:text-sm prose-p:leading-relaxed prose-p:text-foreground/90
+                  prose-li:text-sm prose-li:text-foreground/90
+                  prose-strong:text-foreground
+                  prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{meeting.summary}</ReactMarkdown>
+                </div>
               </div>
             )}
           </TabsContent>
@@ -256,7 +291,7 @@ export function MeetingDetail({ meeting: initialMeeting, onBack, onDelete }: Mee
             {isProcessing && (
               <div className="space-y-2">
                 {[...Array(5)].map((_, i) => (
-                  <Skeleton key={i} className="h-8 w-full" />
+                  <Skeleton key={i} className="h-14 w-full" />
                 ))}
               </div>
             )}
@@ -270,11 +305,7 @@ export function MeetingDetail({ meeting: initialMeeting, onBack, onDelete }: Mee
               </div>
             )}
             {meeting.action_items && meeting.action_items.length > 0 && (
-              <div className="space-y-2">
-                {meeting.action_items.map((item, i) => (
-                  <ActionItemCard key={i} item={item} />
-                ))}
-              </div>
+              <ActionItemsList items={meeting.action_items} />
             )}
           </TabsContent>
 
@@ -286,19 +317,26 @@ export function MeetingDetail({ meeting: initialMeeting, onBack, onDelete }: Mee
               </div>
             )}
             {meeting.files?.map((f) => (
-              <div key={f.id} className="mb-4">
+              <div key={f.id} className="mb-6">
                 <div className="flex items-center gap-2 mb-2">
                   {getFileIcon(f.filetype)}
                   <span className="text-sm font-medium text-foreground">{f.filename}</span>
                   <Badge variant="outline" className="text-[10px]">{f.filetype}</Badge>
+                  {f.status === "ready" && (
+                    <Badge className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                      <CheckCircle2 className="w-3 h-3 mr-1" /> Transcribed
+                    </Badge>
+                  )}
                 </div>
                 {f.transcription ? (
-                  <pre className="bg-muted border border-border rounded-lg p-4 text-xs text-foreground/80 whitespace-pre-wrap overflow-auto max-h-96">
-                    {f.transcription}
-                  </pre>
+                  <TranscriptionView content={f.transcription} filename={f.filename} />
                 ) : (
-                  <p className="text-xs text-muted-foreground italic">
-                    {f.status === "processing" ? "Transcribing..." : "No content available"}
+                  <p className="text-xs text-muted-foreground italic pl-6">
+                    {f.status === "processing" ? (
+                      <span className="flex items-center gap-1.5">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Transcribing...
+                      </span>
+                    ) : "No content available"}
                   </p>
                 )}
               </div>
@@ -310,31 +348,154 @@ export function MeetingDetail({ meeting: initialMeeting, onBack, onDelete }: Mee
   );
 }
 
-function ActionItemCard({ item }: { item: ActionItem }) {
+function ActionItemsList({ items }: { items: ActionItem[] }) {
+  const [filter, setFilter] = useState<"all" | "pending" | "completed">("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filtered = items.filter((item) => {
+    if (filter === "pending" && item.completed) return false;
+    if (filter === "completed" && !item.completed) return false;
+    if (searchQuery && !item.text.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !(item.assignee || "").toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  const completedCount = items.filter((i) => i.completed).length;
+  const pendingCount = items.length - completedCount;
+
   return (
-    <Card className="bg-card border-border">
+    <div className="space-y-3">
+      {/* Stats and filter bar */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-[10px] gap-1">
+            <Circle className="w-2.5 h-2.5 text-amber-500" /> {pendingCount} pending
+          </Badge>
+          <Badge variant="outline" className="text-[10px] gap-1">
+            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" /> {completedCount} done
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {(["all", "pending", "completed"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`text-[10px] px-2 py-0.5 rounded-full capitalize transition-colors ${
+                filter === f
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search action items..."
+          className="pl-8 h-8 text-xs bg-muted/50"
+        />
+      </div>
+      {/* Items */}
+      <div className="space-y-2">
+        {filtered.length === 0 && (
+          <p className="text-center text-xs text-muted-foreground py-6">No matching action items</p>
+        )}
+        {filtered.map((item, i) => (
+          <ActionItemCard key={i} item={item} index={i + 1} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ActionItemCard({ item, index }: { item: ActionItem; index?: number }) {
+  return (
+    <Card className={`bg-card border-border transition-colors ${item.completed ? "opacity-60" : ""}`}>
       <CardContent className="p-3 flex items-start gap-3">
-        <div className="mt-0.5">
+        <div className="mt-0.5 shrink-0">
           {item.completed ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
           ) : (
-            <Circle className="w-4 h-4 text-muted-foreground/40" />
+            <Circle className="w-4 h-4 text-amber-500/60 dark:text-amber-400/60" />
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-foreground">{item.text}</p>
-          <div className="flex items-center gap-3 mt-1">
+          <p className={`text-sm text-foreground ${item.completed ? "line-through text-muted-foreground" : ""}`}>
+            {index != null && <span className="text-muted-foreground mr-1.5 text-xs">#{index}</span>}
+            {item.text}
+          </p>
+          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
             {item.assignee && (
-              <span className="text-xs text-violet-600 dark:text-violet-400">@{item.assignee}</span>
+              <span className="inline-flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded">
+                <User className="w-3 h-3" /> {item.assignee}
+              </span>
             )}
             {item.due_date && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                 <Clock className="w-3 h-3" /> {item.due_date}
+              </span>
+            )}
+            {!item.completed && !item.due_date && !item.assignee && (
+              <span className="inline-flex items-center gap-1 text-xs text-amber-600/60 dark:text-amber-400/60">
+                <AlertCircle className="w-3 h-3" /> Unassigned
               </span>
             )}
           </div>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function TranscriptionView({ content, filename }: { content: string; filename: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const maxLines = 20;
+  const lines = content.split("\n");
+  const isLong = lines.length > maxLines;
+  const displayContent = expanded ? content : lines.slice(0, maxLines).join("\n");
+
+  // Detect if it looks like a timestamped transcript (VTT / SRT style)
+  const hasTimestamps = /\d{1,2}:\d{2}/.test(content.slice(0, 500));
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <div className="bg-muted/50 px-3 py-1.5 flex items-center justify-between text-[11px] text-muted-foreground border-b border-border">
+        <span className="flex items-center gap-1.5">
+          <FileText className="w-3 h-3" />
+          {filename}
+          {hasTimestamps && <Badge variant="outline" className="text-[9px] py-0">timestamped</Badge>}
+        </span>
+        <span>{lines.length} lines</span>
+      </div>
+      <div className="p-4 text-xs text-foreground/80 whitespace-pre-wrap overflow-auto max-h-[400px] font-mono leading-relaxed">
+        {hasTimestamps ? (
+          displayContent.split("\n").map((line, i) => {
+            const isTS = /^\d{1,2}:\d{2}/.test(line.trim());
+            return (
+              <div key={i} className={isTS ? "text-primary/60 mt-2 first:mt-0 font-semibold" : ""}>
+                {line}
+              </div>
+            );
+          })
+        ) : (
+          displayContent
+        )}
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-primary hover:bg-muted/50 border-t border-border transition-colors"
+        >
+          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {expanded ? "Show less" : `Show all ${lines.length} lines`}
+        </button>
+      )}
+    </div>
   );
 }

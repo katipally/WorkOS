@@ -83,7 +83,7 @@ export default function App() {
       <motion.aside
         animate={{ width: collapsed ? 56 : 224 }}
         transition={{ duration: 0.2, ease: "easeInOut" }}
-        className="flex flex-col border-r bg-sidebar text-sidebar-foreground shrink-0 overflow-hidden"
+        className="flex flex-col border-r bg-sidebar text-sidebar-foreground shrink-0 overflow-hidden sidebar-auto-collapse"
       >
         {/* Logo + collapse */}
         <div className={cn("flex items-center border-b border-sidebar-border shrink-0",
@@ -146,15 +146,15 @@ export default function App() {
             <TooltipTrigger asChild>
               <Button variant="ghost" size={collapsed ? "icon" : "sm"}
                 onClick={toggleAIPanel}
-                aria-label="AI Assistant"
+                aria-label="Work Agent"
                 className={cn("text-sidebar-foreground/60 hover:text-sidebar-foreground",
                   collapsed ? "w-full h-9" : "w-full justify-start gap-3 text-sm h-9",
                   aiPanelOpen && "bg-primary/10 text-primary font-medium")}>
                 <MessageSquare className="w-4 h-4 shrink-0" />
-                {!collapsed && "AI Assistant"}
+                {!collapsed && "Work Agent"}
               </Button>
             </TooltipTrigger>
-            {collapsed && <TooltipContent side="right">AI Assistant</TooltipContent>}
+            {collapsed && <TooltipContent side="right">Work Agent</TooltipContent>}
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -189,7 +189,7 @@ export default function App() {
       </motion.aside>
 
       <main className="flex-1 overflow-hidden flex">
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden section-main">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div key={activeTabSafe}
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}

@@ -1,22 +1,24 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Square, Paperclip, Loader2, Hash, Github, Video, ArrowUp } from "lucide-react";
+import { Square, Paperclip, Loader2, Hash, Github, Video, ArrowUp, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { aiApi } from "@/api/client";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Tab } from "@/types";
-import {
-  PromptInput,
-  PromptInputTextarea,
-  PromptInputActions,
-  PromptInputAction,
-} from "@/components/prompt-kit/prompt-input";
 
 const CONTEXT_SOURCES = [
   { id: "slack", label: "Slack", icon: Hash, color: "text-emerald-500 dark:text-emerald-400" },
   { id: "github", label: "GitHub", icon: Github, color: "text-blue-500 dark:text-blue-400" },
   { id: "meetings", label: "Meetings", icon: Video, color: "text-violet-500 dark:text-violet-400" },
 ] as const;
+
+interface UploadedFile {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  previewUrl?: string;
+}
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -26,24 +28,35 @@ interface ChatInputProps {
   focusedTab?: Tab;
 }
 
-export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _focusedTab }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [showMentionPicker, setShowMentionPicker] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [activeMentions, setActiveMentions] = useState<string[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = useCallback(() => {
     if (!input.trim() || isStreaming || disabled) return;
     onSend(input.trim());
     setInput("");
     setActiveMentions([]);
+    setUploadedFiles([]);
     setShowMentionPicker(false);
   }, [input, onSend, isStreaming, disabled]);
 
-  const handleValueChange = useCallback((val: string) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }, [handleSubmit]);
+
+  const handleValueChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
     setInput(val);
     const atMatch = val.match(/@(\w*)$/);
     if (atMatch) {
@@ -52,7 +65,6 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _
     } else {
       setShowMentionPicker(false);
     }
-    // Track active mentions
     const mentions = [...val.matchAll(/@(\w+)/g)].map((m) => m[1].toLowerCase());
     setActiveMentions(mentions.filter((m) =>
       CONTEXT_SOURCES.some((s) => s.label.toLowerCase() === m)
@@ -63,7 +75,6 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _
     const newVal = input.replace(/@(\w*)$/, `@${sourceLabel} `);
     setInput(newVal);
     setShowMentionPicker(false);
-    // Update active mentions
     const mentions = [...newVal.matchAll(/@(\w+)/g)].map((m) => m[1].toLowerCase());
     setActiveMentions(mentions.filter((m) =>
       CONTEXT_SOURCES.some((s) => s.label.toLowerCase() === m)
@@ -73,8 +84,22 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _
   const uploadFile = useCallback(async (file: File) => {
     setUploading(true);
     try {
-      await aiApi.uploadFile(file);
+      const result = await aiApi.uploadFile(file);
       toast.success(`Uploaded ${file.name}`);
+
+      // Create preview URL for images
+      let previewUrl: string | undefined;
+      if (file.type.startsWith("image/")) {
+        previewUrl = URL.createObjectURL(file);
+      }
+
+      setUploadedFiles((prev) => [...prev, {
+        id: result.id || crypto.randomUUID(),
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        previewUrl,
+      }]);
       setInput((prev) => prev + (prev ? " " : "") + `[${file.name}]`);
     } catch {
       toast.error("Failed to upload file");
@@ -82,6 +107,14 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  }, []);
+
+  const removeFile = useCallback((id: string) => {
+    setUploadedFiles((prev) => {
+      const file = prev.find((f) => f.id === id);
+      if (file?.previewUrl) URL.revokeObjectURL(file.previewUrl);
+      return prev.filter((f) => f.id !== id);
+    });
   }, []);
 
   const handleFileInputChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,6 +136,15 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _
     if (file) await uploadFile(file);
   }, [uploadFile]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "0px";
+      const scrollH = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = Math.min(scrollH, 160) + "px";
+    }
+  }, [input]);
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (!(e.target as Element).closest("[data-mention-picker]")) {
@@ -117,33 +159,33 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _
     (s) => s.label.toLowerCase().startsWith(mentionQuery)
   );
 
+  const tabPlaceholders: Record<string, string> = {
+    slack: "Ask about Slack channels, messages, or users...",
+    github: "Ask about repos, issues, PRs, or commits...",
+    meetings: "Ask about meeting summaries or action items...",
+    settings: "Ask about your configuration or integrations...",
+  };
+  const placeholder = isStreaming
+    ? "Agent is working..."
+    : focusedTab
+      ? tabPlaceholders[focusedTab] || "Ask anything... type @ to mention context"
+      : "Ask anything... type @ to mention context";
+
+  const isImageFile = (type: string) => type.startsWith("image/");
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
+
   return (
     <div
-      className="px-3 pb-3 pt-2 shrink-0 border-t border-border/50"
+      className="px-3 pb-3 pt-1 shrink-0"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Active mention badges */}
-      {activeMentions.length > 0 && (
-        <div className="flex gap-1.5 mb-2 px-1">
-          {activeMentions.map((m) => {
-            const src = CONTEXT_SOURCES.find((s) => s.label.toLowerCase() === m);
-            if (!src) return null;
-            const Icon = src.icon;
-            return (
-              <span
-                key={src.id}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted border border-border text-[11px] text-foreground/80"
-              >
-                <Icon className={`w-3 h-3 ${src.color}`} />
-                {src.label}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
       {/* Drop overlay */}
       <AnimatePresence>
         {isDragging && (
@@ -154,12 +196,86 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _
             className="flex items-center justify-center py-4 mb-2 rounded-xl border-2 border-dashed border-primary/50 bg-primary/5 text-primary text-xs gap-2"
           >
             <Paperclip className="w-4 h-4" />
-            Drop file to add to AI context
+            Drop file to add context
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="relative">
+      {/* ── Floating Input Pill ─────────────────────────────────── */}
+      <div className="relative rounded-2xl bg-card/80 backdrop-blur-sm border border-border/60 shadow-lg shadow-black/5 dark:shadow-black/20 transition-all focus-within:border-primary/40 focus-within:shadow-primary/5">
+
+        {/* File thumbnails strip */}
+        <AnimatePresence>
+          {uploadedFiles.length > 0 && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="flex gap-2 px-3 pt-3 pb-1 flex-wrap">
+                {uploadedFiles.map((file) => (
+                  <motion.div
+                    key={file.id}
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.8, opacity: 0 }}
+                    className="relative group/file"
+                  >
+                    {isImageFile(file.type) && file.previewUrl ? (
+                      <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-border/40">
+                        <img
+                          src={file.previewUrl}
+                          alt={file.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          onClick={() => removeFile(file.id)}
+                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover/file:opacity-100 transition-opacity"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-muted/60 border border-border/40 text-xs max-w-[180px]">
+                        <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate text-foreground/80">{file.name}</span>
+                        <span className="text-muted-foreground/60 shrink-0">{formatFileSize(file.size)}</span>
+                        <button
+                          onClick={() => removeFile(file.id)}
+                          className="ml-auto shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Active mention badges */}
+        {activeMentions.length > 0 && (
+          <div className="flex gap-1.5 px-3 pt-2">
+            {activeMentions.map((m) => {
+              const src = CONTEXT_SOURCES.find((s) => s.label.toLowerCase() === m);
+              if (!src) return null;
+              const Icon = src.icon;
+              return (
+                <span
+                  key={src.id}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[11px] text-primary"
+                >
+                  <Icon className="w-3 h-3" />
+                  {src.label}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
         {/* @ mention picker */}
         <AnimatePresence>
           {showMentionPicker && filteredSources.length > 0 && (
@@ -168,7 +284,7 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
-              className="absolute bottom-full mb-1.5 left-2 z-50 rounded-xl border border-border bg-popover/95 backdrop-blur-md shadow-xl overflow-hidden min-w-[180px]"
+              className="absolute bottom-full mb-2 left-2 z-50 rounded-xl border border-border bg-popover/95 backdrop-blur-md shadow-xl overflow-hidden min-w-[180px]"
             >
               <p className="text-[10px] text-muted-foreground px-3 pt-2 pb-1 font-medium uppercase tracking-wider">Mention context</p>
               {filteredSources.map((src) => {
@@ -188,72 +304,71 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab: _
           )}
         </AnimatePresence>
 
-        <PromptInput
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
+          data-ai-input
           value={input}
-          onValueChange={handleValueChange}
-          onSubmit={handleSubmit}
-          isLoading={isStreaming}
+          onChange={handleValueChange}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
           disabled={disabled}
-          className="border-border bg-card shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/30 transition-all"
-        >
-          <PromptInputTextarea
-            placeholder={isStreaming ? "AI is thinking..." : "Ask anything... type @ to mention context"}
-            className="text-sm text-foreground placeholder:text-muted-foreground"
-          />
-          <PromptInputActions className="justify-between">
-            <div className="flex items-center gap-1">
-              <PromptInputAction tooltip="Attach file">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading || isStreaming}
-                >
-                  {uploading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Paperclip className="w-4 h-4" />
-                  )}
-                </Button>
-              </PromptInputAction>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                aria-label="Upload file for AI context"
-                onChange={handleFileInputChange}
-                accept=".txt,.md,.pdf,.docx,.csv,.json,.png,.jpg,.jpeg,.webp"
-              />
-            </div>
+          rows={1}
+          className="w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 px-4 pt-3 pb-1 outline-none min-h-[40px] max-h-[160px]"
+        />
 
-            <div className="flex items-center gap-1">
-              {isStreaming ? (
-                <Button
-                  size="icon"
-                  variant="destructive"
-                  className="h-8 w-8 rounded-full"
-                  onClick={onStop}
-                >
-                  <Square className="w-3.5 h-3.5" />
-                </Button>
+        {/* Actions bar */}
+        <div className="flex items-center justify-between px-2 pb-2">
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-lg text-muted-foreground/60 hover:text-foreground"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || isStreaming}
+            >
+              {uploading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Button
-                  size="icon"
-                  className="h-8 w-8 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-30"
-                  onClick={handleSubmit}
-                  disabled={!input.trim() || disabled}
-                >
-                  <ArrowUp className="w-4 h-4" />
-                </Button>
+                <Paperclip className="w-4 h-4" />
               )}
-            </div>
-          </PromptInputActions>
-        </PromptInput>
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              aria-label="Upload file"
+              onChange={handleFileInputChange}
+              accept=".txt,.md,.pdf,.docx,.csv,.json,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.ogg,.flac,.aac,.mp4,.webm,.mkv,.avi,.mov"
+            />
+          </div>
+
+          <div className="flex items-center gap-1">
+            {isStreaming ? (
+              <Button
+                size="icon"
+                variant="destructive"
+                className="h-7 w-7 rounded-full"
+                onClick={onStop}
+              >
+                <Square className="w-3 h-3" />
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                className="h-7 w-7 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-30"
+                onClick={handleSubmit}
+                disabled={!input.trim() || disabled}
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
 
-      <p className="text-[10px] text-muted-foreground/60 mt-2 text-center">
-        AI may produce inaccurate information. Verify important details.
+      <p className="text-[10px] text-muted-foreground/50 mt-1.5 text-center">
+        Work Agent may produce inaccurate information. Verify important details.
       </p>
     </div>
   );

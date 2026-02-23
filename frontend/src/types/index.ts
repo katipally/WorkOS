@@ -86,6 +86,8 @@ export interface AISettings {
   meeting_summary_model: string;
   meeting_actions_provider: string;
   meeting_actions_model: string;
+  vision_provider: string;
+  vision_model: string;
   openai_api_key: string;
   ollama_base_url: string;
 }

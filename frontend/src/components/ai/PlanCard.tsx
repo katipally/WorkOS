@@ -5,9 +5,6 @@ import {
   ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Steps, StepsTrigger, StepsContent, StepsItem,
-} from "@/components/prompt-kit/steps";
 
 export interface PlanStep {
   id: number;
@@ -24,8 +21,8 @@ interface PlanCardProps {
 const statusConfig = {
   pending: {
     icon: Circle,
-    color: "text-muted-foreground",
-    bg: "bg-muted/50",
+    color: "text-muted-foreground/50",
+    bg: "bg-transparent",
     label: "Pending",
   },
   running: {
@@ -38,13 +35,13 @@ const statusConfig = {
   done: {
     icon: CheckCircle2,
     color: "text-emerald-500 dark:text-emerald-400",
-    bg: "bg-emerald-500/10",
+    bg: "bg-emerald-500/5",
     label: "Done",
   },
   failed: {
     icon: XCircle,
     color: "text-destructive",
-    bg: "bg-destructive/10",
+    bg: "bg-destructive/5",
     label: "Failed",
   },
 };
@@ -55,60 +52,100 @@ export const PlanCard = memo(function PlanCard({ steps }: PlanCardProps) {
   const doneCount = steps.filter((s) => s.status === "done").length;
   const allDone = doneCount === steps.length;
   const hasRunning = steps.some((s) => s.status === "running");
+  const progress = steps.length > 0 ? (doneCount / steps.length) * 100 : 0;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="ml-11 rounded-xl border border-border/60 bg-card/50 overflow-hidden px-3 py-2"
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+      className="rounded-xl border border-border/50 bg-card/40 overflow-hidden"
     >
-      <Steps defaultOpen={true}>
-        <StepsTrigger
-          leftIcon={
-            <ListChecks className={cn("w-4 h-4", allDone ? "text-emerald-500" : "text-primary")} />
-          }
-          className="text-xs font-medium"
-        >
+      {/* Progress bar */}
+      <div className="h-0.5 bg-muted/30 overflow-hidden">
+        <motion.div
+          className={cn(
+            "h-full rounded-full",
+            allDone ? "bg-emerald-500" : "bg-primary"
+          )}
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        />
+      </div>
+
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <ListChecks className={cn("w-3.5 h-3.5", allDone ? "text-emerald-500" : "text-primary")} />
+        <span className="text-xs font-medium text-foreground/80">
           {allDone
             ? `Plan completed (${doneCount}/${steps.length})`
             : hasRunning
-              ? `Executing plan... (${doneCount}/${steps.length})`
-              : `Planned steps (${steps.length})`}
-        </StepsTrigger>
-        <StepsContent>
-          <AnimatePresence>
-            {steps.map((step) => {
-              const cfg = statusConfig[step.status];
-              const Icon = cfg.icon;
-              return (
-                <StepsItem key={step.id}>
-                  <motion.div
-                    initial={{ opacity: 0, x: -4 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className={cn(
-                      "flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs transition-colors",
-                      cfg.bg,
-                    )}
-                  >
-                    <Icon className={cn("w-3.5 h-3.5 shrink-0", cfg.color, "animate" in cfg && cfg.animate && "animate-spin")} />
-                    <span className={cn(
-                      "flex-1",
-                      step.status === "done" ? "text-muted-foreground line-through" : "text-foreground",
-                    )}>
-                      {step.label}
-                    </span>
-                    {step.tool && (
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        {step.tool}
-                      </span>
-                    )}
-                  </motion.div>
-                </StepsItem>
-              );
-            })}
-          </AnimatePresence>
-        </StepsContent>
-      </Steps>
+              ? `Executing step ${doneCount + 1} of ${steps.length}`
+              : `Planning ${steps.length} steps`}
+        </span>
+        {hasRunning && (
+          <motion.span
+            className="ml-auto"
+            animate={{ opacity: [0.4, 1, 0.4] }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+          </motion.span>
+        )}
+      </div>
+
+      {/* Steps */}
+      <div className="px-2 pb-2 space-y-0.5">
+        <AnimatePresence mode="popLayout">
+          {steps.map((step, index) => {
+            const cfg = statusConfig[step.status];
+            const Icon = cfg.icon;
+            const isActive = step.status === "running";
+
+            return (
+              <motion.div
+                key={step.id}
+                initial={{ opacity: 0, x: -8, height: 0 }}
+                animate={{ opacity: 1, x: 0, height: "auto" }}
+                transition={{
+                  delay: index * 0.08,
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 25,
+                }}
+                className={cn(
+                  "flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition-all duration-300",
+                  cfg.bg,
+                  isActive && "ring-1 ring-blue-500/20",
+                )}
+              >
+                <motion.div
+                  animate={isActive ? { scale: [1, 1.15, 1] } : {}}
+                  transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <Icon className={cn(
+                    "w-3.5 h-3.5 shrink-0",
+                    cfg.color,
+                    "animate" in cfg && cfg.animate && "animate-spin",
+                  )} />
+                </motion.div>
+                <span className={cn(
+                  "flex-1 transition-all duration-300",
+                  step.status === "done" ? "text-muted-foreground line-through" : "text-foreground",
+                )}>
+                  {step.label}
+                </span>
+                {step.tool && (
+                  <span className="text-[10px] text-muted-foreground/60 font-mono">
+                    {step.tool}
+                  </span>
+                )}
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 });

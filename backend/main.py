@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
+from core.errors import register_error_handlers
 from db.connection import init_db_pool, close_db_pool, run_migrations, _refresh_collation
 
 # Import tool packages — triggers @tool registration on each import
@@ -18,8 +19,8 @@ from tools.registry import mount_tools
 
 # OAuth authorize/callback still served as a normal router (HTML responses)
 from routers import oauth as oauth_router
-# AI chat router (SSE streaming — not a tool, needs dedicated router)
-from routers import ai as ai_router
+# AI routers — split by concern
+from routers import ai_chat, ai_sessions, ai_features
 
 
 @asynccontextmanager
@@ -32,6 +33,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="WorkOS", version="4.0.0", lifespan=lifespan)
+
+# Register custom error handlers
+register_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,8 +55,10 @@ mount_tools(app, registry)
 # OAuth authorize/callback (HTML popup flow — cannot be a tool)
 app.include_router(oauth_router.router, prefix="/api/oauth", tags=["oauth"])
 
-# AI chat (SSE streaming — cannot be a tool)
-app.include_router(ai_router.router)
+# AI routers (split by concern)
+app.include_router(ai_chat.router)      # SSE streaming + stop
+app.include_router(ai_sessions.router)  # Session CRUD
+app.include_router(ai_features.router)  # Branching, pinning, upload, approval
 
 
 # ── Meeting file upload (multipart/form-data — not a tool) ────────────────

@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from db.connection import get_pool
 from services.embedding_service import embed_texts, embed_query
+from services.agent.config import CHUNK_SIZE, CHUNK_OVERLAP, RAG_MIN_SCORE_THRESHOLD, RAG_RERANK_MIN_SCORE
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ def _get_ranker():
 
 # ─── Chunking ────────────────────────────────────────────────────────────────
 
-async def chunk_text(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> list[str]:
+async def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: int = CHUNK_OVERLAP) -> list[str]:
     """Split text into semantically coherent chunks."""
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -248,6 +249,9 @@ async def search_documents(
     # Sort by score descending
     results.sort(key=lambda x: x["score"], reverse=True)
 
+    # ── Drop results below minimum cosine‑similarity threshold ───────
+    results = [r for r in results if r["score"] >= RAG_MIN_SCORE_THRESHOLD]
+
     # Optional reranking with FlashRank (uses singleton)
     if results:
         ranker = _get_ranker()
@@ -263,7 +267,9 @@ async def search_documents(
                     idx = int(item["id"])
                     entry = results[idx].copy()
                     entry["rerank_score"] = item["score"]
-                    reranked_results.append(entry)
+                    # Also discard if FlashRank score is too low
+                    if entry["rerank_score"] >= RAG_RERANK_MIN_SCORE:
+                        reranked_results.append(entry)
                 results = reranked_results
             except Exception as e:
                 log.warning("FlashRank reranking failed: %s — using vector scores", e)

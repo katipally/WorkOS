@@ -197,3 +197,34 @@
 .prose-styles th {
   @apply bg-muted font-medium;
 }
+
+/* ─── Responsive helpers ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .sidebar-auto-collapse {
+    width: 56px !important;
+  }
+  .ai-panel-mobile {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    width: 100% !important;
+  }
+}
+
+/* ─── Section differentiation ────────────────────────────────────── */
+.section-sidebar {
+  background: var(--sidebar);
+  border-right: 1px solid var(--sidebar-border);
+}
+.section-main {
+  background: var(--background);
+}
+.section-ai-panel {
+  border-left: 1px solid var(--border);
+}
+.dark .section-ai-panel {
+  background: oklch(0.16 0.005 285.823);
+}
+.section-ai-panel {
+  background: oklch(0.98 0.001 286);
+}

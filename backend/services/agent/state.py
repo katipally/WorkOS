@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 from langchain_core.messages import BaseMessage
+from langchain_core.tools import BaseTool
 from langgraph.graph.message import add_messages
 
 
@@ -28,6 +29,17 @@ class AgentState:
 
     # Explicit @-mentioned sources from the user message (e.g. ["slack", "meetings"])
     context_mentions: list[str] = field(default_factory=list)
+
+    # Current view context — what the user is looking at right now
+    selected_repo: str = ""
+    selected_channel: str = ""
+    selected_channel_name: str = ""
+
+    # Scope-filtered tools for this invocation (set before graph.astream)
+    active_tools: list = field(default_factory=list)
+
+    # OAuth-connected providers (set before graph.astream)
+    connected_providers: set = field(default_factory=set)
 
     # RAG context retrieved for this turn
     rag_context: list[dict] = field(default_factory=list)

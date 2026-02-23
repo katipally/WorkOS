@@ -81,6 +81,32 @@ async def slack_sync_channels(inp) -> list[SlackChannel]:
         )
 
     logger.info("[slack_sync_channels] upserted %d channels", len(channels))
+
+    # Index channel metadata into RAG data_index (background, non-blocking)
+    try:
+        from services.rag_service import index_data
+
+        for ch in channels:
+            content = f"Slack channel #{ch.channel_name}"
+            if ch.topic:
+                content += f" — Topic: {ch.topic}"
+            if ch.purpose:
+                content += f" — Purpose: {ch.purpose}"
+            await index_data(
+                source_type="slack_channel",
+                entity_id=ch.channel_id,
+                title=f"#{ch.channel_name}",
+                content=content,
+                metadata={
+                    "channel_id": ch.channel_id,
+                    "is_private": ch.is_private,
+                    "num_members": ch.num_members,
+                },
+            )
+        logger.info("[slack_sync_channels] indexed %d channels for RAG", len(channels))
+    except Exception as e:
+        logger.warning("[slack_sync_channels] RAG indexing failed (non-fatal): %s", e)
+
     return channels
 
 

@@ -441,6 +441,24 @@ function AIConfigSection() {
               isProviderReady={isProviderReady}
             />
           </Card>
+
+          {/* Vision Model */}
+          <Card className="p-4">
+            <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
+              <Eye className="w-4 h-4 text-cyan-400" /> Vision Model (Image Analysis)
+            </h3>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Used to analyze uploaded images. Requires a vision-capable model (e.g. GPT-4o, LLaVA).
+            </p>
+            <ModelSelector
+              providerKey="vision_provider"
+              modelKey="vision_model"
+              localSettings={localSettings}
+              updateField={updateField}
+              getModels={getModelsForProvider}
+              isProviderReady={isProviderReady}
+            />
+          </Card>
         </div>
       </ScrollArea>
     </>

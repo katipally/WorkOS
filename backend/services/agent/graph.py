@@ -16,37 +16,32 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
 from services.agent.state import AgentState
-from services.agent.tools import AGENT_TOOLS
+from services.agent.tools import AGENT_TOOLS, get_tools_for_context
 from services.agent.prompts import build_system_prompt
+from services.agent.config import (
+    LLM_TIMEOUT_SECONDS,
+    MAX_TOOL_LOOPS,
+    APPROVAL_REQUIRED_TOOLS,
+    COMPACTION_THRESHOLD,
+    COMPACTION_KEEP_RECENT,
+    COMPACTION_CHAR_LIMIT,
+    COMPACTION_INPUT_CAP,
+    COMPACTION_TEMPERATURE,
+    RAG_DEFAULT_TOP_K,
+    RAG_TAB_TOP_K,
+    RAG_MIN_PER_SOURCE,
+    RAG_CONTEXT_SNIPPET_LEN,
+    RAG_MAX_SNIPPETS,
+)
 from services.ai_service import get_llm
 from services.rag_service import search_documents
 
 log = logging.getLogger(__name__)
-
-# ─── Configuration ────────────────────────────────────────────────────────────
-LLM_TIMEOUT_SECONDS = 90
-MAX_TOOL_LOOPS = 10
-
-# Tools that require approval before executing
-APPROVAL_REQUIRED_TOOLS = {
-    # Slack write operations
-    "slack_send_message",
-    "slack_send_dm",
-    "slack_pin_message",
-    "slack_schedule_message",
-    "slack_edit_message",
-    "slack_delete_message",
-    # GitHub write operations
-    "github_create_issue",
-    "github_create_branch",
-    "github_submit_pr_review",
-    "github_merge_pr",
-    "github_create_release",
-}
 
 
 async def _get_pinned_messages(session_id: str) -> list[str]:
@@ -101,7 +96,7 @@ async def rag_retrieval_node(state: AgentState) -> dict:
         if state.context_mentions:
             # Multi-source retrieval balanced across mentioned sources
             all_results: list[dict] = []
-            per_source_k = max(2, 6 // len(state.context_mentions))
+            per_source_k = max(RAG_MIN_PER_SOURCE, RAG_DEFAULT_TOP_K // len(state.context_mentions))
             for mention in state.context_mentions:
                 src = mention_to_source.get(mention)
                 results = await search_documents(last_user_msg, top_k=per_source_k, source_filter=src)
@@ -114,15 +109,15 @@ async def rag_retrieval_node(state: AgentState) -> dict:
                 if key not in seen:
                     seen.add(key)
                     deduped.append(r)
-            return {"rag_context": deduped[:6]}
+            return {"rag_context": deduped[:RAG_DEFAULT_TOP_K]}
 
         elif state.scope == "tab":
             source_filter = tab_to_source.get(state.focused_tab)
-            results = await search_documents(last_user_msg, top_k=5, source_filter=source_filter)
+            results = await search_documents(last_user_msg, top_k=RAG_TAB_TOP_K, source_filter=source_filter)
             return {"rag_context": results}
 
         else:
-            results = await search_documents(last_user_msg, top_k=6)
+            results = await search_documents(last_user_msg, top_k=RAG_DEFAULT_TOP_K)
             return {"rag_context": results}
 
     except Exception as e:
@@ -148,35 +143,61 @@ async def llm_node(state: AgentState) -> dict:
         focused_tab=state.focused_tab,
         scope=state.scope,
         pinned_messages=pinned,
+        connected_providers=state.connected_providers or None,
+        selected_repo=state.selected_repo,
+        selected_channel=state.selected_channel,
+        selected_channel_name=state.selected_channel_name,
     )
 
     # Add RAG context to system prompt if available
     if state.rag_context:
         rag_text = "\n\n## Relevant Context (from indexed documents/data)\n"
-        for i, ctx in enumerate(state.rag_context[:5], 1):
+        for i, ctx in enumerate(state.rag_context[:RAG_MAX_SNIPPETS], 1):
             source = ctx.get("source", "unknown")
             title = ctx.get("title", ctx.get("filename", ""))
-            content = ctx.get("content", "")[:500]
+            content = ctx.get("content", "")[:RAG_CONTEXT_SNIPPET_LEN]
             rag_text += f"\n### [{i}] {source}: {title}\n{content}\n"
         system_prompt += rag_text
 
     # Smart compaction: summarize old messages if conversation is long
     conv_messages = state.messages
     compaction_performed = False
-    if len(conv_messages) > 20:
+    if len(conv_messages) > COMPACTION_THRESHOLD:
         try:
-            summary_llm = await get_llm("ai", streaming=False, temperature=0.3)
-            old_msgs = conv_messages[:-10]  # Keep last 10 intact
-            recent_msgs = conv_messages[-10:]
+            summary_llm = await get_llm("ai", streaming=False, temperature=COMPACTION_TEMPERATURE)
+
+            # Find a safe split point: never break inside an
+            # AIMessage(tool_calls) → ToolMessage sequence.
+            split_idx = max(0, len(conv_messages) - COMPACTION_KEEP_RECENT)
+            # Walk the split point forward until we're not inside a
+            # tool_call/ToolMessage pair.
+            while split_idx < len(conv_messages):
+                msg = conv_messages[split_idx]
+                if isinstance(msg, ToolMessage):
+                    split_idx += 1  # skip orphan ToolMessages
+                elif isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+                    split_idx += 1  # skip AIMessage that has tool_calls pending
+                else:
+                    break
+
+            if split_idx <= 0 or split_idx >= len(conv_messages):
+                # Can't safely split — skip compaction
+                raise ValueError("No safe split point found")
+
+            old_msgs = conv_messages[:split_idx]
+            recent_msgs = conv_messages[split_idx:]
             old_text = "\n".join(
-                f"{getattr(m, 'type', 'unknown')}: {m.content[:200]}"
+                f"{getattr(m, 'type', 'unknown')}: {(m.content if isinstance(m.content, str) else str(m.content))[:COMPACTION_CHAR_LIMIT]}"
                 for m in old_msgs if hasattr(m, 'content') and m.content
             )
             summary_resp = await summary_llm.ainvoke([
                 SystemMessage(content="Summarize the following conversation history concisely. Preserve key decisions, action items, and context."),
-                HumanMessage(content=old_text[:4000]),
+                HumanMessage(content=old_text[:COMPACTION_INPUT_CAP]),
             ])
-            system_prompt += f"\n\n## Summary of Earlier Conversation\n{summary_resp.content}\n"
+            summary_content = summary_resp.content
+            if isinstance(summary_content, list):
+                summary_content = " ".join(str(x) for x in summary_content)
+            system_prompt += f"\n\n## Summary of Earlier Conversation\n{summary_content}\n"
             conv_messages = recent_msgs
             compaction_performed = True
         except Exception as e:
@@ -188,8 +209,12 @@ async def llm_node(state: AgentState) -> dict:
 
     # Get LLM with tools (streaming=True enables real token-by-token streaming
     # when the graph is invoked with stream_mode including "messages")
-    llm = await get_llm("ai", streaming=True, temperature=0.7)
-    llm_with_tools = llm.bind_tools(AGENT_TOOLS)
+    # temperature=None → reads from DB ai_temperature setting
+    llm = await get_llm("ai", streaming=True, temperature=None)
+
+    # Use scope-filtered tools from state (set by caller), fallback to all tools
+    tools = state.active_tools if state.active_tools else AGENT_TOOLS
+    llm_with_tools = llm.bind_tools(tools)
 
     try:
         response = await asyncio.wait_for(
@@ -199,13 +224,53 @@ async def llm_node(state: AgentState) -> dict:
     except asyncio.TimeoutError:
         log.warning("LLM call timed out after %ds", LLM_TIMEOUT_SECONDS)
         response = AIMessage(content="I'm sorry, the request took too long. Please try again with a simpler question.")
+    except Exception as e:
+        log.exception("LLM invocation error")
+        response = AIMessage(content=f"An error occurred while processing your request: {e}")
 
+    # ── Normalise response.content ────────────────────────────────────
+    # Some providers (Ollama) may return content as a list of dicts
+    # instead of a plain string.  Flatten it to avoid downstream crashes.
+    if isinstance(response, AIMessage):
+        if isinstance(response.content, list):
+            parts = []
+            for item in response.content:
+                if isinstance(item, dict):
+                    parts.append(item.get("text", str(item)))
+                elif isinstance(item, str):
+                    parts.append(item)
+                else:
+                    parts.append(str(item))
+            response.content = "".join(parts)
+        # ── Ensure all tool_calls have an "id" field ─────────────────
+        # Ollama / some providers may omit the tool_call id, which breaks
+        # the ToolMessage → tool_call_id mapping downstream.
+        import uuid as _uuid
+        if getattr(response, "tool_calls", None):
+            for tc in response.tool_calls:
+                if not tc.get("id"):
+                    tc["id"] = f"call_{_uuid.uuid4().hex[:12]}"
     # Generate plan steps for multi-tool calls
     plan_steps = []
     thoughts = []
 
     if compaction_performed:
         thoughts.append("Summarized earlier conversation to stay within context limits")
+
+    # ── Capture real LLM reasoning tokens (OpenAI o1/o3/o4, Anthropic) ───
+    if isinstance(response, AIMessage):
+        # OpenAI reasoning models put chain‑of‑thought in additional_kwargs
+        reasoning = (
+            getattr(response, "reasoning_content", None)
+            or (response.additional_kwargs or {}).get("reasoning_content")
+            or (response.additional_kwargs or {}).get("reasoning")
+        )
+        if reasoning:
+            # Split long reasoning into digestible thought steps
+            for line in reasoning.strip().split("\n"):
+                line = line.strip()
+                if line:
+                    thoughts.append(line)
 
     if isinstance(response, AIMessage) and getattr(response, "tool_calls", None):
         if len(response.tool_calls) > 1:
@@ -229,12 +294,30 @@ async def llm_node(state: AgentState) -> dict:
 
 # ─── Node: Tool Execution ────────────────────────────────────────────────────
 
-tool_node = ToolNode(AGENT_TOOLS)
-
 
 async def tool_execution_node(state: AgentState) -> dict:
     """Execute tools and generate receipt metadata + action cards."""
-    result = await tool_node.ainvoke(state)
+    # Build ToolNode with the same filtered tools used by llm_node
+    tools = state.active_tools if state.active_tools else AGENT_TOOLS
+    dynamic_tool_node = ToolNode(tools)
+
+    try:
+        result = await dynamic_tool_node.ainvoke(state)
+    except Exception as e:
+        # If ToolNode crashes (e.g. tool not found, network error),
+        # generate a synthetic ToolMessage for every pending tool_call
+        # so the graph can continue instead of dying.
+        log.exception("ToolNode execution failed")
+        last_msg = state.messages[-1] if state.messages else None
+        synthetic_msgs = []
+        if isinstance(last_msg, AIMessage) and getattr(last_msg, "tool_calls", None):
+            for tc in last_msg.tool_calls:
+                synthetic_msgs.append(ToolMessage(
+                    content=f"Tool execution failed: {e}",
+                    tool_call_id=tc.get("id", ""),
+                    name=tc.get("name", "unknown"),
+                ))
+        result = {"messages": synthetic_msgs}
 
     # Build receipts and action cards from tool results
     receipts = []
@@ -242,7 +325,15 @@ async def tool_execution_node(state: AgentState) -> dict:
     new_messages = result.get("messages", [])
     for msg in new_messages:
         tool_name = getattr(msg, "name", "unknown")
-        content = msg.content if hasattr(msg, "content") else str(msg)
+        raw_content = msg.content if hasattr(msg, "content") else str(msg)
+        # Normalise content — Ollama / some models can return list content
+        if isinstance(raw_content, list):
+            content = "".join(
+                item.get("text", str(item)) if isinstance(item, dict) else str(item)
+                for item in raw_content
+            )
+        else:
+            content = str(raw_content) if raw_content else ""
         receipt = {
             "tool": tool_name,
             "action": tool_name.replace("_", " ").title(),
