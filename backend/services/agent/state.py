@@ -41,6 +41,9 @@ class AgentState:
     # OAuth-connected providers (set before graph.astream)
     connected_providers: set = field(default_factory=set)
 
+    # File IDs uploaded via AI panel for this turn (document IDs from /api/ai/upload)
+    uploaded_file_ids: list[str] = field(default_factory=list)
+
     # RAG context retrieved for this turn
     rag_context: list[dict] = field(default_factory=list)
 

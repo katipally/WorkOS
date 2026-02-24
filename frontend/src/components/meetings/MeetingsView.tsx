@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Video, Plus, Upload, Loader2, FileText,
   Calendar, ChevronRight, Trash2, AlertCircle, CheckCircle2,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,8 @@ export function MeetingsView() {
   const { selectedMeetingId, setSelectedMeetingId } = useAppStore();
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "processing" | "ready" | "error">("all");
 
   const { data: meetings = [], isLoading } = useQuery({
     queryKey: ["meetings"],
@@ -59,6 +62,26 @@ export function MeetingsView() {
   });
 
   const selectedMeeting = meetings.find((m) => m.id === selectedMeetingId);
+  const counts = useMemo(() => ({
+    pending: meetings.filter((m) => m.status === "pending").length,
+    processing: meetings.filter((m) => m.status === "processing").length,
+    ready: meetings.filter((m) => m.status === "ready").length,
+    error: meetings.filter((m) => m.status === "error").length,
+  }), [meetings]);
+
+  const visibleMeetings = useMemo(() => {
+    return [...meetings]
+      .filter((meeting) => {
+        if (statusFilter !== "all" && meeting.status !== statusFilter) return false;
+        if (!search.trim()) return true;
+        const q = search.toLowerCase();
+        return (
+          meeting.title.toLowerCase().includes(q)
+          || (meeting.summary || "").toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  }, [meetings, search, statusFilter]);
 
   if (selectedMeeting) {
     return (
@@ -115,6 +138,44 @@ export function MeetingsView() {
       {/* Meeting List */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-2">
+          {!isLoading && meetings.length > 0 && (
+            <div className="space-y-2 pb-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <StatusStat label="Ready" value={counts.ready} tone="ready" />
+                <StatusStat label="Processing" value={counts.processing} tone="processing" />
+                <StatusStat label="Pending" value={counts.pending} tone="pending" />
+                <StatusStat label="Errors" value={counts.error} tone="error" />
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search meetings, summaries..."
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {(["all", "pending", "processing", "ready", "error"] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setStatusFilter(status)}
+                    className={`text-[10px] px-2 py-0.5 rounded-full capitalize transition-colors ${
+                      statusFilter === status
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+                <span className="text-[10px] text-muted-foreground ml-auto">
+                  {visibleMeetings.length} result{visibleMeetings.length === 1 ? "" : "s"}
+                </span>
+              </div>
+            </div>
+          )}
+
           {isLoading && (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -134,8 +195,16 @@ export function MeetingsView() {
             </div>
           )}
 
+          {!isLoading && meetings.length > 0 && visibleMeetings.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Search className="w-10 h-10 text-muted-foreground/30 mb-3" />
+              <p className="text-sm text-muted-foreground mb-1">No meetings match your filters</p>
+              <p className="text-xs text-muted-foreground/70">Try another keyword or status.</p>
+            </div>
+          )}
+
           <AnimatePresence mode="popLayout">
-            {meetings.map((meeting) => (
+            {visibleMeetings.map((meeting) => (
               <MeetingCard
                 key={meeting.id}
                 meeting={meeting}
@@ -146,6 +215,22 @@ export function MeetingsView() {
           </AnimatePresence>
         </div>
       </ScrollArea>
+    </div>
+  );
+}
+
+function StatusStat({ label, value, tone }: { label: string; value: number; tone: "ready" | "processing" | "pending" | "error" }) {
+  const toneClass = {
+    ready: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+    processing: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+    pending: "bg-muted text-muted-foreground border-border",
+    error: "bg-destructive/10 text-destructive border-destructive/30",
+  }[tone];
+
+  return (
+    <div className={`rounded-lg border px-2.5 py-2 ${toneClass}`}>
+      <p className="text-[10px] uppercase tracking-wide opacity-80">{label}</p>
+      <p className="text-sm font-semibold leading-tight">{value}</p>
     </div>
   );
 }

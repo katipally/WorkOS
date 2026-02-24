@@ -109,6 +109,7 @@ async def chat_stream(req: ChatRequest, request: Request):
                 selected_repo=req.selected_repo or "",
                 selected_channel=req.selected_channel or "",
                 selected_channel_name=req.selected_channel_name or "",
+                uploaded_file_ids=req.uploaded_file_ids or [],
             )
 
             # Only emit context thought when actively scoped or using mentions

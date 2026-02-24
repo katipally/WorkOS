@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import { useAppStore } from "@/store/useAppStore";
@@ -10,13 +10,16 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import SlackView from "@/components/slack/SlackView";
-import GitHubView from "@/components/github/GitHubView";
-import { MeetingsView } from "@/components/meetings/MeetingsView";
-import SettingsView from "@/components/settings/SettingsView";
-import { AIPanel } from "@/components/ai/AIPanel";
-import CommandPalette from "@/components/command-palette";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+const SlackView = lazy(() => import("@/components/slack/SlackView"));
+const GitHubView = lazy(() => import("@/components/github/GitHubView"));
+const MeetingsView = lazy(() =>
+  import("@/components/meetings/MeetingsView").then((mod) => ({ default: mod.MeetingsView }))
+);
+const SettingsView = lazy(() => import("@/components/settings/SettingsView"));
+const AIPanel = lazy(() => import("@/components/ai/AIPanel").then((mod) => ({ default: mod.AIPanel })));
+const CommandPalette = lazy(() => import("@/components/command-palette"));
 
 const NAV_TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "slack", label: "Slack", icon: Hash },
@@ -51,6 +54,14 @@ function NavItem({
     );
   }
   return btn;
+}
+
+function TabLoadingFallback() {
+  return (
+    <div className="h-full w-full flex items-center justify-center text-muted-foreground text-sm">
+      Loading view...
+    </div>
+  );
 }
 
 export default function App() {
@@ -195,20 +206,26 @@ export default function App() {
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.12, ease: "easeOut" }} className="h-full">
               <ErrorBoundary key={activeTabSafe}>
-                {activeTabSafe === "slack" && <SlackView />}
-                {activeTabSafe === "github" && <GitHubView />}
-                {activeTabSafe === "meetings" && <MeetingsView />}
-                {activeTabSafe === "settings" && <SettingsView />}
+                <Suspense fallback={<TabLoadingFallback />}>
+                  {activeTabSafe === "slack" && <SlackView />}
+                  {activeTabSafe === "github" && <GitHubView />}
+                  {activeTabSafe === "meetings" && <MeetingsView />}
+                  {activeTabSafe === "settings" && <SettingsView />}
+                </Suspense>
               </ErrorBoundary>
             </motion.div>
           </AnimatePresence>
         </div>
 
         {/* AI Panel (right side) */}
-        <AIPanel />
+        <Suspense fallback={null}>
+          <AIPanel />
+        </Suspense>
       </main>
 
-      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+      <Suspense fallback={null}>
+        <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+      </Suspense>
     </div>
   );
 }

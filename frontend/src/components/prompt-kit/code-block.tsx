@@ -1,6 +1,5 @@
 import { cn } from "@/lib/utils"
 import React, { useEffect, useState } from "react"
-import { codeToHtml } from "shiki"
 
 export type CodeBlockProps = {
   children?: React.ReactNode
@@ -39,15 +38,35 @@ function CodeBlockCode({
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null)
 
   useEffect(() => {
+    let active = true
+
     async function highlight() {
       if (!code) {
-        setHighlightedHtml("<pre><code></code></pre>")
+        if (active) setHighlightedHtml("<pre><code></code></pre>")
         return
       }
-      const html = await codeToHtml(code, { lang: language, theme })
-      setHighlightedHtml(html)
+
+      try {
+        const { codeToHtml } = await import("shiki")
+        const html = await codeToHtml(code, { lang: language, theme })
+        if (active) setHighlightedHtml(html)
+      } catch {
+        if (active) {
+          setHighlightedHtml(
+            `<pre><code>${String(code)
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")}</code></pre>`
+          )
+        }
+      }
     }
+
     highlight()
+
+    return () => {
+      active = false
+    }
   }, [code, language, theme])
 
   const classNames = cn(

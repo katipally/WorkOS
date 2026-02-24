@@ -21,7 +21,7 @@ interface UploadedFile {
 }
 
 interface ChatInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, uploadedFileIds?: string[]) => void;
   onStop: () => void;
   isStreaming: boolean;
   disabled?: boolean;
@@ -41,12 +41,13 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab }:
 
   const handleSubmit = useCallback(() => {
     if (!input.trim() || isStreaming || disabled) return;
-    onSend(input.trim());
+    const fileIds = uploadedFiles.map((f) => f.id);
+    onSend(input.trim(), fileIds.length > 0 ? fileIds : undefined);
     setInput("");
     setActiveMentions([]);
     setUploadedFiles([]);
     setShowMentionPicker(false);
-  }, [input, onSend, isStreaming, disabled]);
+  }, [input, onSend, isStreaming, disabled, uploadedFiles]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -237,7 +238,7 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab }:
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-muted/60 border border-border/40 text-xs max-w-[180px]">
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-muted/60 border border-border/40 text-xs max-w-45">
                         <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         <span className="truncate text-foreground/80">{file.name}</span>
                         <span className="text-muted-foreground/60 shrink-0">{formatFileSize(file.size)}</span>
@@ -284,7 +285,7 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab }:
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
-              className="absolute bottom-full mb-2 left-2 z-50 rounded-xl border border-border bg-popover/95 backdrop-blur-md shadow-xl overflow-hidden min-w-[180px]"
+              className="absolute bottom-full mb-2 left-2 z-50 rounded-xl border border-border bg-popover/95 backdrop-blur-md shadow-xl overflow-hidden min-w-45"
             >
               <p className="text-[10px] text-muted-foreground px-3 pt-2 pb-1 font-medium uppercase tracking-wider">Mention context</p>
               {filteredSources.map((src) => {
@@ -314,7 +315,7 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled, focusedTab }:
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
-          className="w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 px-4 pt-3 pb-1 outline-none min-h-[40px] max-h-[160px]"
+          className="w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 px-4 pt-3 pb-1 outline-none min-h-10 max-h-40"
         />
 
         {/* Actions bar */}

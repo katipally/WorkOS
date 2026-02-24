@@ -26,6 +26,7 @@ export default defineConfig({
           "vendor-motion":   ["framer-motion"],
           "vendor-markdown": ["react-markdown"],
           "vendor-dropzone": ["react-dropzone"],
+          "vendor-shiki":    ["shiki"],
         },
       },
     },

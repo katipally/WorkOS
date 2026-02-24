@@ -22,6 +22,8 @@ class ChatRequest(BaseModel):
     selected_repo: Optional[str] = None
     selected_channel: Optional[str] = None
     selected_channel_name: Optional[str] = None
+    # File IDs uploaded in the AI panel (from /api/ai/upload) for this message
+    uploaded_file_ids: list[str] = Field(default_factory=list)
 
 
 class StopRequest(BaseModel):

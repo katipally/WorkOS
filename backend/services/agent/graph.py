@@ -60,6 +60,34 @@ async def _get_pinned_messages(session_id: str) -> list[str]:
     return [r["content"] for r in rows]
 
 
+async def _fetch_uploaded_files_info(file_ids: list[str] | None) -> list[dict] | None:
+    """Fetch document metadata for uploaded file IDs."""
+    if not file_ids:
+        return None
+    try:
+        from db.connection import get_pool
+        import uuid as _uuid
+
+        pool = get_pool()
+        ids = [_uuid.UUID(fid) for fid in file_ids]
+        rows = await pool.fetch(
+            "SELECT id, filename, filetype, filesize FROM documents WHERE id = ANY($1::uuid[])",
+            ids,
+        )
+        return [
+            {
+                "id": str(r["id"]),
+                "filename": r["filename"],
+                "filetype": r["filetype"] or "unknown",
+                "filesize": r["filesize"] or 0,
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        log.warning("Failed to fetch uploaded file info: %s", e)
+        return None
+
+
 # ─── Node: RAG Retrieval ─────────────────────────────────────────────────────
 
 async def rag_retrieval_node(state: AgentState) -> dict:
@@ -147,6 +175,7 @@ async def llm_node(state: AgentState) -> dict:
         selected_repo=state.selected_repo,
         selected_channel=state.selected_channel,
         selected_channel_name=state.selected_channel_name,
+        uploaded_files_info=await _fetch_uploaded_files_info(state.uploaded_file_ids),
     )
 
     # Add RAG context to system prompt if available

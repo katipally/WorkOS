@@ -92,6 +92,10 @@ APPROVAL_REQUIRED_TOOLS: set[str] = {
     "github_submit_pr_review",
     "github_merge_pr",
     "github_create_release",
+    # Meetings write operations
+    "meetings_create",
+    "meetings_delete",
+    "meetings_process",
 }
 
 # ─── Reasoning Models ───────────────────────────────────────────────────────

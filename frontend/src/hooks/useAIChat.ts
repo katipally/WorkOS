@@ -476,7 +476,7 @@ export function useAIChat() {
 
     /* ─── Send message ─────────────────────────────────────────────── */
     const sendMessage = useCallback(
-        async (message: string, _retry = 0) => {
+        async (message: string, uploadedFileIds?: string[], _retry = 0) => {
             if (!message.trim() || isStreaming) return;
             if (!isOnline) {
                 setStreamError("You are offline. Please check your connection.");
@@ -530,6 +530,7 @@ export function useAIChat() {
                         selected_repo: selectedRepo !== "__none__" ? selectedRepo : null,
                         selected_channel: selectedSlackChannel?.id ?? null,
                         selected_channel_name: selectedSlackChannel?.name ?? null,
+                        uploaded_file_ids: uploadedFileIds ?? [],
                     }),
                     signal: controller.signal,
                 });
@@ -552,7 +553,7 @@ export function useAIChat() {
                     if (mountedRef.current) {
                         setStreamError(null);
                         setIsStreaming(false);
-                        return sendMessage(message, _retry + 1);
+                        return sendMessage(message, uploadedFileIds, _retry + 1);
                     }
                 } else {
                     setStreamError("Connection failed. Please try again.");
