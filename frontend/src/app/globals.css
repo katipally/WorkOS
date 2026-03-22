@@ -1,0 +1,320 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* Gemini-specific color tokens */
+  --color-gemini-surface: var(--gemini-surface);
+  --color-gemini-surface-dim: var(--gemini-surface-dim);
+  --color-gemini-on-surface: var(--gemini-on-surface);
+  --color-gemini-on-surface-muted: var(--gemini-on-surface-muted);
+  --color-gemini-user-bubble: var(--gemini-user-bubble);
+  --color-gemini-composer-bg: var(--gemini-composer-bg);
+  --color-gemini-send: var(--gemini-send);
+  --color-gemini-send-text: var(--gemini-send-text);
+  --color-gemini-chip-bg: var(--gemini-chip-bg);
+  --color-gemini-chip-border: var(--gemini-chip-border);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ─── Gemini-Inspired Light Theme ──────────────────────────────── */
+:root {
+  --background: #f8f9fa;
+  --foreground: #1f1f1f;
+  --card: #ffffff;
+  --card-foreground: #1f1f1f;
+  --popover: #ffffff;
+  --popover-foreground: #1f1f1f;
+  --primary: #1a73e8;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f3f4;
+  --secondary-foreground: #1f1f1f;
+  --muted: #f1f3f4;
+  --muted-foreground: #70757a;
+  --accent: #e8f0fe;
+  --accent-foreground: #1a73e8;
+  --destructive: #d93025;
+  --border: #dadce0;
+  --input: #dadce0;
+  --ring: #1a73e8;
+  --chart-1: #1a73e8;
+  --chart-2: #34a853;
+  --chart-3: #fbbc04;
+  --chart-4: #ea4335;
+  --chart-5: #9334e6;
+  --radius: 0.625rem;
+  /* Gemini-specific */
+  --gemini-surface: #f8f9fa;
+  --gemini-surface-dim: #f1f3f4;
+  --gemini-on-surface: #1f1f1f;
+  --gemini-on-surface-muted: #444746;
+  --gemini-user-bubble: #e9eef6;
+  --gemini-composer-bg: #ffffff;
+  --gemini-send: #d3e3fd;
+  --gemini-send-text: #1f1f1f;
+  --gemini-chip-bg: #ffffff;
+  --gemini-chip-border: #dadce0;
+  /* Code blocks */
+  --code-bg: #f6f8fa;
+  --code-header-bg: #eff2f5;
+  /* Sidebar */
+  --sidebar: #f0f4f9;
+  --sidebar-foreground: #1f1f1f;
+  --sidebar-primary: #1a73e8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d3e3fd;
+  --sidebar-accent-foreground: #1a73e8;
+  --sidebar-border: #dadce0;
+  --sidebar-ring: #1a73e8;
+}
+
+/* ─── Gemini-Inspired Dark Theme ───────────────────────────────── */
+.dark {
+  --background: #131314;
+  --foreground: #e3e3e3;
+  --card: #1e1f20;
+  --card-foreground: #e3e3e3;
+  --popover: #1e1f20;
+  --popover-foreground: #e3e3e3;
+  --primary: #8ab4f8;
+  --primary-foreground: #1f1f1f;
+  --secondary: #282a2c;
+  --secondary-foreground: #e3e3e3;
+  --muted: #282a2c;
+  --muted-foreground: #9aa0a6;
+  --accent: #1f3760;
+  --accent-foreground: #8ab4f8;
+  --destructive: #f28b82;
+  --border: #3c4043;
+  --input: #3c4043;
+  --ring: #8ab4f8;
+  --chart-1: #8ab4f8;
+  --chart-2: #81c995;
+  --chart-3: #fdd663;
+  --chart-4: #f28b82;
+  --chart-5: #c58af9;
+  /* Gemini-specific */
+  --gemini-surface: #131314;
+  --gemini-surface-dim: #1e1f20;
+  --gemini-on-surface: #e3e3e3;
+  --gemini-on-surface-muted: #c4c7c5;
+  --gemini-user-bubble: #282a2c;
+  --gemini-composer-bg: #1e1f20;
+  --gemini-send: #1f3760;
+  --gemini-send-text: #e3e3e3;
+  --gemini-chip-bg: #282a2c;
+  --gemini-chip-border: #3c4043;
+  /* Code blocks */
+  --code-bg: #0d1117;
+  --code-header-bg: #161b22;
+  /* Sidebar */
+  --sidebar: #1e1f20;
+  --sidebar-foreground: #e3e3e3;
+  --sidebar-primary: #8ab4f8;
+  --sidebar-primary-foreground: #1f1f1f;
+  --sidebar-accent: #1f3760;
+  --sidebar-accent-foreground: #8ab4f8;
+  --sidebar-border: #3c4043;
+  --sidebar-ring: #8ab4f8;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ─── Animations ───────────────────────────────────────────────── */
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+@utility animate-shimmer {
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes collapsible-down {
+  from { height: 0; opacity: 0; transform: translateY(-4px); }
+  to   { height: var(--radix-collapsible-content-height); opacity: 1; transform: translateY(0); }
+}
+
+@keyframes collapsible-up {
+  from { height: var(--radix-collapsible-content-height); opacity: 1; transform: translateY(0); }
+  to   { height: 0; opacity: 0; transform: translateY(-4px); }
+}
+
+@utility animate-collapsible-down {
+  animation: collapsible-down var(--animation-duration, 250ms) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: height, opacity, transform;
+}
+
+@utility animate-collapsible-up {
+  animation: collapsible-up var(--animation-duration, 200ms) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: height, opacity, transform;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@utility animate-fade-in {
+  animation: fade-in 0.4s ease-out both;
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@utility animate-scale-in {
+  animation: scale-in 0.2s ease-out both;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 var(--ring, #1a73e8) / 0.4; }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@utility animate-pulse-ring {
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+/* Shimmer text effect for reasoning/tool labels */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--gemini-on-surface-muted, #444746) 0%,
+    var(--primary, #1a73e8) 40%,
+    var(--primary, #1a73e8) 60%,
+    var(--gemini-on-surface-muted, #444746) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* ─── Skeleton loading ─────────────────────────────────────────── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.8; }
+}
+
+.skeleton-line {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--border) 50%, var(--muted) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* ─── Scrollbar styling ────────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* ─── Shiki dual-theme support ─────────────────────────────────── */
+html.dark .shiki,
+html.dark .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: transparent !important;
+}
+
+html:not(.dark) .shiki,
+html:not(.dark) .shiki span {
+  color: var(--shiki-light) !important;
+  background-color: transparent !important;
+}
+
+/* Code block line numbers */
+.has-line-numbers .line {
+  display: inline-flex;
+  width: 100%;
+}
+
+.has-line-numbers .line-number {
+  display: inline-block;
+  width: 3ch;
+  margin-right: 1.5ch;
+  text-align: right;
+  color: var(--muted-foreground);
+  opacity: 0.5;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+/* Code block container */
+.code-block-wrapper pre {
+  background-color: var(--code-bg) !important;
+}
+
+.code-block-wrapper .shiki {
+  background-color: var(--code-bg) !important;
+}

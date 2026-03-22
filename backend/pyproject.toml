@@ -1,0 +1,45 @@
+[project]
+name = "workos-backend"
+version = "0.1.0"
+description = "WorkOS — ReAct Loop AI Agent Backend"
+readme = "README.md"
+authors = [
+    { name = "katipally", email = "yashwanthreddy3471@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "fastapi>=0.135.1",
+    "httpx>=0.28.1",
+    "langchain>=1.2.13",
+    "langchain-core>=1.2.20",
+    "langchain-mcp-adapters>=0.2.2",
+    "langchain-ollama>=1.0.1",
+    "langgraph>=1.1.3",
+    "langgraph-checkpoint-sqlite>=3.0.3",
+    "ddgs>=7.0.0",
+    "pydantic-settings>=2.13.1",
+    "uvicorn[standard]>=0.42.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.15.7",
+]
